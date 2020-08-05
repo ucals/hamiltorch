@@ -399,7 +399,13 @@ def hamiltonian(params, momentum, log_prob_func, jitter=0.01, normalizing_const=
     #     return hamiltonian[0], model_parameters
 
 
-def sample(log_prob_func, params_init, num_samples=10, num_steps_per_sample=10, step_size=0.1, burn=0, jitter=None, inv_mass=None, normalizing_const=1., softabs_const=None, explicit_binding_const=100, fixed_point_threshold=1e-5, fixed_point_max_iterations=1000, jitter_max_tries=10, sampler=Sampler.HMC, integrator=Integrator.IMPLICIT, metric=Metric.HESSIAN, debug=False, desired_accept_rate=0.8):
+def sample(log_prob_func, params_init, num_samples=10, num_steps_per_sample=10,
+           step_size=0.1, burn=0, jitter=None, inv_mass=None,
+           normalizing_const=1., softabs_const=None, explicit_binding_const=100,
+           fixed_point_threshold=1e-5, fixed_point_max_iterations=1000,
+           jitter_max_tries=10, sampler=Sampler.HMC,
+           integrator=Integrator.IMPLICIT, metric=Metric.HESSIAN, debug=False,
+           desired_accept_rate=0.8, silent=False):
 
     if params_init.dim() != 1:
         raise RuntimeError('params_init must be a 1d tensor.')
@@ -429,15 +435,57 @@ def sample(log_prob_func, params_init, num_samples=10, num_steps_per_sample=10, 
     ret_params = [params.clone()]
     num_rejected = 0
     # if sampler == Sampler.HMC:
-    util.progress_bar_init('Sampling ({}; {})'.format(sampler, integrator), num_samples, 'Samples')
+    if not silent:
+        util.progress_bar_init('Sampling ({}; {})'.format(sampler, integrator), num_samples, 'Samples')
+
     for n in range(num_samples):
-        util.progress_bar_update(n)
+        if not silent:
+            util.progress_bar_update(n)
+
         try:
-            momentum = gibbs(params, sampler=sampler, log_prob_func=log_prob_func, jitter=jitter, normalizing_const=normalizing_const, softabs_const=softabs_const, metric=metric, mass=mass)
+            momentum = gibbs(
+                params,
+                sampler=sampler,
+                log_prob_func=log_prob_func,
+                jitter=jitter,
+                normalizing_const=normalizing_const,
+                softabs_const=softabs_const,
+                metric=metric,
+                mass=mass
+            )
 
-            ham = hamiltonian(params, momentum, log_prob_func, jitter=jitter, softabs_const=softabs_const, explicit_binding_const=explicit_binding_const, normalizing_const=normalizing_const, sampler=sampler, integrator=integrator, metric=metric, inv_mass=inv_mass)
+            ham = hamiltonian(
+                params,
+                momentum,
+                log_prob_func,
+                jitter=jitter,
+                softabs_const=softabs_const,
+                explicit_binding_const=explicit_binding_const,
+                normalizing_const=normalizing_const,
+                sampler=sampler,
+                integrator=integrator,
+                metric=metric,
+                inv_mass=inv_mass
+            )
 
-            leapfrog_params, leapfrog_momenta = leapfrog(params, momentum, log_prob_func, sampler=sampler, integrator=integrator, steps=num_steps_per_sample, step_size=step_size, inv_mass=inv_mass, jitter=jitter, jitter_max_tries=jitter_max_tries, fixed_point_threshold=fixed_point_threshold, fixed_point_max_iterations=fixed_point_max_iterations, softabs_const=softabs_const, explicit_binding_const=explicit_binding_const, metric=metric, debug=debug)
+            leapfrog_params, leapfrog_momenta = leapfrog(
+                params,
+                momentum,
+                log_prob_func,
+                sampler=sampler,
+                integrator=integrator,
+                steps=num_steps_per_sample,
+                step_size=step_size,
+                inv_mass=inv_mass,
+                jitter=jitter,
+                jitter_max_tries=jitter_max_tries,
+                fixed_point_threshold=fixed_point_threshold,
+                fixed_point_max_iterations=fixed_point_max_iterations,
+                softabs_const=softabs_const,
+                explicit_binding_const=explicit_binding_const,
+                metric=metric,
+                debug=debug
+            )
             if sampler == Sampler.RMHMC and integrator == Integrator.EXPLICIT:
 
                 # Step required to remove bias by comparing to Hamiltonian that is not augmented:
@@ -453,15 +501,35 @@ def sample(log_prob_func, params_init, num_samples=10, num_steps_per_sample=10, 
                 leapfrog_momenta = leapfrog_momenta[0]
 
                 # This is trying the new (unbiased) version:
-                new_ham = rm_hamiltonian(params, momentum, log_prob_func, jitter, normalizing_const, softabs_const=softabs_const, sampler=sampler, integrator=integrator, metric=metric) # In rm sampler so no need for inv_mass
+                new_ham = rm_hamiltonian(
+                    params,
+                    momentum,
+                    log_prob_func,
+                    jitter,
+                    normalizing_const,
+                    softabs_const=softabs_const,
+                    sampler=sampler,
+                    integrator=integrator,
+                    metric=metric
+                ) # In rm sampler so no need for inv_mass
                 # new_ham = hamiltonian([params,params_copy] , [momentum,momentum_copy], log_prob_func, jitter=jitter, softabs_const=softabs_const, explicit_binding_const=explicit_binding_const, normalizing_const=normalizing_const, sampler=sampler, integrator=integrator, metric=metric)
 
             else:
                 params = leapfrog_params[-1].detach().requires_grad_()
                 momentum = leapfrog_momenta[-1]
-                new_ham = hamiltonian(params, momentum, log_prob_func, jitter=jitter, softabs_const=softabs_const, explicit_binding_const=explicit_binding_const, normalizing_const=normalizing_const, sampler=sampler, integrator=integrator, metric=metric, inv_mass=inv_mass)
-
-
+                new_ham = hamiltonian(
+                    params,
+                    momentum,
+                    log_prob_func,
+                    jitter=jitter,
+                    softabs_const=softabs_const,
+                    explicit_binding_const=explicit_binding_const,
+                    normalizing_const=normalizing_const,
+                    sampler=sampler,
+                    integrator=integrator,
+                    metric=metric,
+                    inv_mass=inv_mass
+                )
 
             # new_ham = hamiltonian(params, momentum, log_prob_func, jitter=jitter, softabs_const=softabs_const, explicit_binding_const=explicit_binding_const, normalizing_const=normalizing_const, sampler=sampler, integrator=integrator, metric=metric)
             rho = min(0., acceptance(ham, new_ham))
@@ -509,11 +577,14 @@ def sample(log_prob_func, params_init, num_samples=10, num_steps_per_sample=10, 
 
         # gc.collect()
 
-    util.progress_bar_end('Acceptance Rate {:.2f}'.format(1 - num_rejected/num_samples)) #need to adapt for burn
+    if not silent:
+        util.progress_bar_end('Acceptance Rate {:.2f}'.format(1 - num_rejected/num_samples)) #need to adapt for burn
+
     if NUTS and debug:
         return list(map(lambda t: t.detach(), ret_params)), step_size
     else:
         return list(map(lambda t: t.detach(), ret_params))
+
 
 def define_model_log_prob(model, model_loss, x, y, params_flattened_list, params_shape_list, tau_list, tau_out, predict=False):
     fmodel = util.make_functional(model)
